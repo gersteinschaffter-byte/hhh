@@ -382,6 +382,16 @@ export default class BattleScene extends BaseScene {
     const maxHeal = Math.max(0, ...teamStats.map((u) => u.healingDone));
 
     const reportRowH = 30;
+    const trimText = (txt: any, maxW: number) => {
+      const raw = String(txt.text ?? '');
+      if (!raw || txt.width <= maxW) return;
+      let t = raw;
+      while (t.length > 1) {
+        t = t.slice(0, -1);
+        txt.text = t + '…';
+        if (txt.width <= maxW) break;
+      }
+    };
     teamStats.forEach((u, idx) => {
       const heroName = u.heroId ? HERO_MAP[u.heroId]?.name ?? u.heroId : u.unitId;
       const classLabel = u.heroClass ? HERO_CLASS_LABEL[u.heroClass as keyof typeof HERO_CLASS_LABEL] ?? u.heroClass : '';
@@ -393,6 +403,7 @@ export default class BattleScene extends BaseScene {
 
       const nameLine = createText(`${heroName} · ${classLabel}${badgeText}`, 18, 0xffffff, '800');
       nameLine.position.set(colName, 6 + reportRowH * (idx + 1));
+      trimText(nameLine, colDamage - 12);
 
       const damageLine = createText(String(Math.floor(u.damageDealt)), 18, 0xffffff, '800');
       damageLine.anchor.set(1, 0);

@@ -6,7 +6,7 @@ import { HERO_CLASS_LABEL, HEROES, HERO_MAP } from '../game/data';
 import { GAME_VERSION, BUILD_TIME } from '../game/version';
 import HeroCard from '../ui/components/HeroCard';
 import UIButton from '../ui/components/UIButton';
-import { clamp, createText, drawPanel, rarityLabel } from '../ui/uiFactory';
+import { clamp, createText, rarityLabel, roundedRect } from '../ui/uiFactory';
 import VirtualList from '../ui/VirtualList';
 
 export default class HeroesScene extends BaseScene {
@@ -21,10 +21,13 @@ export default class HeroesScene extends BaseScene {
   private partySlotNodes: Array<{ box: Graphics; label: any; heroId: string | null }> = [];
   private selectingSlot: number | null = null;
   private readonly partyHint;
-  private readonly panel: Graphics;
+  private panel: Graphics;
+  private readonly panelSheen: Graphics;
   private readonly heroList: VirtualList<HeroCard>;
   private heroListData: typeof HEROES = [];
   private wheelUnbind: (() => void) | null = null;
+  private readonly panelW = 700;
+  private panelH = 980;
 
   constructor(game: GameApp) {
     super('heroes');
@@ -46,11 +49,14 @@ export default class HeroesScene extends BaseScene {
     this.root.addChild(this.partyHint);
 
 
-    this.panel = drawPanel(700, 980, 0.96);
+    this.panel = new Graphics();
+    this.panelSheen = new Graphics();
+    this.panel.addChild(this.panelSheen);
     this.root.addChild(this.panel);
+    this.redrawPanel();
 
-    const viewW = 700 - 32;
-    const viewH = 980 - 32;
+    const viewW = this.panelW - 32;
+    const viewH = this.panelH - 32;
     const cols = 3;
     const cardW = 214;
     const cardH = 268;
@@ -111,19 +117,23 @@ export default class HeroesScene extends BaseScene {
     if (!this.wheelUnbind) this.wheelUnbind = this.heroList.bindWheel(this.game.pixi.view);
   }
 
-  public override onResize(w: number, _h: number): void {
+  public override onResize(w: number, h: number): void {
     if (!this.title || (this.title as any).destroyed) return;
-    this.title.position.set(w / 2, 170);
+    const topSafe = 120;
+    const bottomNavH = 150;
+    const bottomSafe = h - bottomNavH - 16;
+    this.title.position.set(w / 2, topSafe + 24);
     if (this.partyText && !(this.partyText as any).destroyed) {
-      this.partyText.position.set(w / 2, 210);
+      this.partyText.position.set(w / 2, topSafe + 62);
     }
     if (this.partyBar && !(this.partyBar as any).destroyed) {
-      this.partyBar.position.set(w / 2, 240);
+      this.partyBar.position.set(w / 2, topSafe + 100);
     }
     if (this.partyHint && !(this.partyHint as any).destroyed) {
-      this.partyHint.position.set(w / 2, 242);
+      this.partyHint.position.set(w / 2, topSafe + 156);
     }
-    this.layoutPanel(w);
+    const panelTop = this.partyHint ? this.partyHint.position.y + 26 : topSafe + 180;
+    this.layoutPanel(w, bottomSafe, panelTop);
     this.buildPartyBar();
 
     this.layoutGrid();
@@ -133,10 +143,29 @@ export default class HeroesScene extends BaseScene {
     this.heroList.update(dt);
   }
 
-  private layoutPanel(w: number): void {
-    this.panel.position.set((w - 700) / 2, 260);
+  private layoutPanel(w: number, bottomSafe: number, panelY: number): void {
+    const maxH = Math.max(620, bottomSafe - panelY);
+    const nextH = Math.min(980, maxH);
+    if (nextH !== this.panelH) {
+      this.panelH = nextH;
+      this.redrawPanel();
+    }
+    this.panel.position.set((w - this.panelW) / 2, panelY);
     this.heroList.position.set(16, 16);
-    this.heroList.resize(700 - 32, 980 - 32);
+    this.heroList.resize(this.panelW - 32, this.panelH - 32);
+  }
+
+  private redrawPanel(): void {
+    this.panel.clear();
+    this.panel.beginFill(0x0e1733, 0.96);
+    this.panel.lineStyle(2, 0x2a4a8d, 0.9);
+    roundedRect(this.panel, 0, 0, this.panelW, this.panelH, 20);
+    this.panel.endFill();
+
+    this.panelSheen.clear();
+    this.panelSheen.beginFill(0xffffff, 0.06);
+    roundedRect(this.panelSheen, 8, 8, this.panelW - 16, Math.min(90, this.panelH - 16), 16);
+    this.panelSheen.endFill();
   }
 
   private layoutGrid(): void {
