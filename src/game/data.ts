@@ -5,13 +5,26 @@ import { ELEMENTS, RARITY } from './config';
 import heroesJson from '../configs/heroes.json';
 import summonProbJson from '../configs/summon_prob.json';
 
+export const HERO_CLASSES = ['tank', 'support', 'assassin', 'warrior', 'mage'] as const;
+export type HeroClass = (typeof HERO_CLASSES)[number];
+
+export const HERO_CLASS_LABEL: Record<HeroClass, string> = {
+  tank: 'Tank',
+  support: 'Support',
+  assassin: 'Assassin',
+  warrior: 'Warrior',
+  mage: 'Mage',
+};
+
 export interface HeroDef {
   id: string;
   name: string;
   rarity: Rarity;
   element: Element;
+  class: HeroClass;
   baseStats: { hp: number; atk: number; spd: number };
   perLevelGrowth: { hp: number; atk: number; spd: number };
+  skillIds?: string[];
 }
 
 // 20 heroes, placeholders (no IP). Loaded from JSON for easy content iteration.

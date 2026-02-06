@@ -1,0 +1,47 @@
+[
+  {
+    "id": "skill_taunt",
+    "name": "嘲讽壁垒",
+    "kind": "active",
+    "cooldown": 3,
+    "target": "self",
+    "effect": "apply_buff",
+    "params": { "buffId": "taunt", "duration": 2, "shieldRatio": 0.18 }
+  },
+  {
+    "id": "skill_heal",
+    "name": "单体治疗",
+    "kind": "active",
+    "cooldown": 2,
+    "target": "ally_single",
+    "effect": "heal",
+    "params": { "ratio": 0.32 }
+  },
+  {
+    "id": "skill_execute",
+    "name": "收割",
+    "kind": "active",
+    "cooldown": 3,
+    "target": "enemy_single",
+    "effect": "damage",
+    "params": { "ratio": 1.15, "executeThreshold": 0.35, "executeMultiplier": 1.7 }
+  },
+  {
+    "id": "skill_cleave",
+    "name": "横扫",
+    "kind": "active",
+    "cooldown": 2,
+    "target": "enemy_aoe",
+    "effect": "damage",
+    "params": { "ratio": 0.85, "maxTargets": 2 }
+  },
+  {
+    "id": "skill_burn",
+    "name": "烈焰波",
+    "kind": "active",
+    "cooldown": 3,
+    "target": "enemy_aoe",
+    "effect": "apply_dot",
+    "params": { "ratio": 0.5, "duration": 3 }
+  }
+]

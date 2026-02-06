@@ -2,23 +2,17 @@ import { Container, Graphics } from 'pixi.js';
 import type GameApp from '../core/GameApp';
 import BaseScene from './BaseScene';
 import { ECONOMY, RARITY } from '../game/config';
-import { HEROES, HERO_MAP } from '../game/data';
+import { HERO_CLASS_LABEL, HEROES, HERO_MAP } from '../game/data';
 import { GAME_VERSION, BUILD_TIME } from '../game/version';
 import HeroCard from '../ui/components/HeroCard';
 import UIButton from '../ui/components/UIButton';
 import { clamp, createText, drawPanel, rarityLabel } from '../ui/uiFactory';
+import VirtualList from '../ui/VirtualList';
 
 export default class HeroesScene extends BaseScene {
   private _unsubHeroesChanged: (() => void) | null = null;
   private _unsubPartyChanged: (() => void) | null = null;
   private _onHeroesChanged = () => this.refresh();
-
-  /**
-   * Drag threshold in pixels.
-   * Purpose: prevent accidental `pointertap` triggers while the user is trying to scroll
-   * (Android WebView/Chrome is especially sensitive and may fire `pointertap` after a small move).
-   */
-  private static readonly DRAG_THRESHOLD = 10;
 
   private readonly game: GameApp;
   private readonly title;
@@ -28,18 +22,9 @@ export default class HeroesScene extends BaseScene {
   private selectingSlot: number | null = null;
   private readonly partyHint;
   private readonly panel: Graphics;
-  private readonly scrollMask: Graphics;
-  private readonly scroll: Container;
-  private pointerDown = false;
-  private isDragging = false;
-  private moved = false;
-  private dragStartX = 0;
-  private dragStartY = 0;
-  private scrollStartY = 0;
-  // Keep scroll origin consistent with mask x/y to avoid visual offset.
-  private readonly scrollBaseX = 16;
-  private readonly scrollBaseY = 16;
-  private contentHeight = 0;
+  private readonly heroList: VirtualList<HeroCard>;
+  private heroListData: typeof HEROES = [];
+  private wheelUnbind: (() => void) | null = null;
 
   constructor(game: GameApp) {
     super('heroes');
@@ -64,39 +49,53 @@ export default class HeroesScene extends BaseScene {
     this.panel = drawPanel(700, 980, 0.96);
     this.root.addChild(this.panel);
 
-    this.scrollMask = new Graphics();
-    this.panel.addChild(this.scrollMask);
-
-    this.scroll = new Container();
-    this.panel.addChild(this.scroll);
-
-    this.panel.interactive = true;
-    this.panel.on('pointerdown', (e) => {
-      // Reset touch-cycle flags.
-      this.pointerDown = true;
-      this.isDragging = false;
-      this.moved = false;
-      this.dragStartX = e.global.x;
-      this.dragStartY = e.global.y;
-      this.scrollStartY = this.scroll.y;
+    const viewW = 700 - 32;
+    const viewH = 980 - 32;
+    const cols = 3;
+    const cardW = 214;
+    const cardH = 268;
+    const rawGapX = Math.floor((viewW - cardW * cols) / (cols - 1));
+    const gapX = clamp(rawGapX, 10, 18);
+    const gapY = 18;
+    const sample = HEROES[0] ?? HEROES[HEROES.length - 1]!;
+    this.heroList = new VirtualList<HeroCard>({
+      width: viewW,
+      height: viewH,
+      itemWidth: cardW,
+      itemHeight: cardH,
+      gapX,
+      gapY,
+      columns: cols,
+      overscanRows: 2,
+      createItem: () => {
+        const card = new HeroCard(sample);
+        card.on('pointertap', () => {
+          const index = (card as any).__index as number | undefined;
+          if (index == null) return;
+          if (this.heroList.shouldBlockTap()) return;
+          const hero = this.heroListData[index];
+          if (!hero) return;
+          if (this.tryAssignPartySlot(hero.id)) return;
+          this.openHeroModal(hero.id);
+        });
+        return card;
+      },
+      updateItem: (card, index) => {
+        const hero = this.heroListData[index];
+        if (!hero) {
+          card.visible = false;
+          return;
+        }
+        card.visible = true;
+        (card as any).__index = index;
+        const owned = this.game.state.getOwnedHero(hero.id);
+        card.setHero(hero, owned);
+        card.setInParty(this.game.state.isInParty(hero.id));
+      },
     });
-    this.panel.on('pointerup', () => this.endTouchCycle());
-    this.panel.on('pointerupoutside', () => this.endTouchCycle());
-    this.panel.on('pointermove', (e) => {
-      if (!this.pointerDown) return;
-      const dx = e.global.x - this.dragStartX;
-      const dy = e.global.y - this.dragStartY;
-
-      // Only treat as drag after exceeding the threshold.
-      if (!this.moved && (Math.abs(dx) >= HeroesScene.DRAG_THRESHOLD || Math.abs(dy) >= HeroesScene.DRAG_THRESHOLD)) {
-        this.moved = true;
-        this.isDragging = true;
-      }
-
-      if (!this.isDragging) return;
-      this.scroll.y = this.scrollStartY + dy;
-      this.clampScroll();
-    });
+    this.heroList.position.set(16, 16);
+    this.panel.addChild(this.heroList);
+    this.wheelUnbind = this.heroList.bindWheel(this.game.pixi.view);
 
     // Data-driven: refresh list when heroes change (gain/upgrade).
     this._unsubHeroesChanged?.();
@@ -108,18 +107,8 @@ export default class HeroesScene extends BaseScene {
     this.refresh();
   }
 
-  /**
-   * End current touch cycle.
-   * Note: we delay resetting `moved` so `pointertap` handlers in the same cycle can filter taps
-   * after a drag gesture (Pixi may still emit `pointertap` on slight movement).
-   */
-  private endTouchCycle(): void {
-    this.pointerDown = false;
-    this.isDragging = false;
-    // Keep `moved` for this tick to filter `pointertap`, then reset for the next gesture.
-    setTimeout(() => {
-      this.moved = false;
-    }, 0);
+  public override onEnter(): void {
+    if (!this.wheelUnbind) this.wheelUnbind = this.heroList.bindWheel(this.game.pixi.view);
   }
 
   public override onResize(w: number, _h: number): void {
@@ -138,28 +127,19 @@ export default class HeroesScene extends BaseScene {
     this.buildPartyBar();
 
     this.layoutGrid();
-    this.clampScroll(true);
+  }
+
+  public override onUpdate(dt: number): void {
+    this.heroList.update(dt);
   }
 
   private layoutPanel(w: number): void {
     this.panel.position.set((w - 700) / 2, 260);
-
-    // mask area
-    this.scrollMask.clear();
-    this.scrollMask.beginFill(0x000000, 1);
-    // Pixi v7 supports drawRoundedRect.
-    this.scrollMask.drawRoundedRect(16, 16, 700 - 32, 980 - 32, 18);
-    this.scrollMask.endFill();
-    this.scroll.mask = this.scrollMask;
-
-    // Make scroll origin consistent with mask's coordinate system (avoid 16 vs 34 offset drift).
-    // X aligns to mask left edge for symmetrical margins.
-    this.scroll.position.set(this.scrollBaseX, this.scrollBaseY);
+    this.heroList.position.set(16, 16);
+    this.heroList.resize(700 - 32, 980 - 32);
   }
 
   private layoutGrid(): void {
-    this.scroll.removeChildren();
-
     const state = this.game.state.getSnapshot();
     const ownedMap = new Map(state.heroes.map((h) => [h.heroId, h] as const));
     const list = HEROES.slice();
@@ -175,56 +155,9 @@ export default class HeroesScene extends BaseScene {
       return a.name.localeCompare(b.name, 'zh');
     });
 
-    const cols = 3;
-    // Viewport width inside mask: viewW = 700 - 32.
-    // Keep cardW=214, compute gapX so 3 columns fit: gapX = floor((viewW - cardW*cols) / (cols-1)).
-    // Clamp to a reasonable range to avoid too-small gaps.
-    const viewW = 700 - 32;
-    const gapY = 18;
-    const cardW = 214,
-      cardH = 268;
-
-    const rawGapX = Math.floor((viewW - cardW * cols) / (cols - 1));
-    const gapX = clamp(rawGapX, 10, 18);
-
-    let maxY = 0;
-    for (let i = 0; i < list.length; i++) {
-      const hero = list[i];
-      const owned = ownedMap.get(hero.id);
-      const card = new HeroCard(hero, owned);
-      // Visibility enhancement: show "in party" status on each hero card.
-      card.setInParty(this.game.state.isInParty(hero.id));
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = col * (cardW + gapX);
-      const y = row * (cardH + gapY);
-      card.position.set(x, y);
-      (card as any).setInParty?.(this.game.state.isInParty(hero.id));
-
-      card.on('pointertap', () => {
-        // Drag filter: do NOT open details if this touch cycle exceeded the drag threshold.
-        if (this.moved || this.isDragging) return;
-        if (this.tryAssignPartySlot(hero.id)) return;
-        this.openHeroModal(hero.id);
-      });
-
-      this.scroll.addChild(card);
-      maxY = Math.max(maxY, y + cardH);
-    }
-    this.contentHeight = maxY;
-  }
-
-  private clampScroll(forceTop = false): void {
-    // Visible height inside the mask, excluding top/bottom padding (18 + 18).
-    const viewH = 980 - 68;
-    // We keep scrolling range in the same coordinate space as scroll.position.y (baseY).
-    const maxY = this.scrollBaseY;
-    const minY = this.scrollBaseY + Math.min(0, viewH - this.contentHeight - 18);
-    if (forceTop) {
-      this.scroll.y = this.scrollBaseY;
-      return;
-    }
-    this.scroll.y = clamp(this.scroll.y, minY, maxY);
+    this.heroListData = list;
+    this.heroList.setItemCount(list.length);
+    this.heroList.refresh(true);
   }
 
   private openHeroModal(heroId: string): void {
@@ -274,7 +207,8 @@ export default class HeroesScene extends BaseScene {
     nameLine.anchor.set(0, 0);
     nameLine.position.set(18, card.h - 76);
 
-    const metaLine = createText(`${hero.element} · ${rarityLabel(hero.rarity)} · ${starsShow}★`, 20, 0xd7e6ff, '800');
+    const classLabel = HERO_CLASS_LABEL[hero.class] ?? hero.class;
+    const metaLine = createText(`${hero.element} · ${rarityLabel(hero.rarity)} · ${classLabel} · ${starsShow}★`, 20, 0xd7e6ff, '800');
     metaLine.anchor.set(0, 0);
     metaLine.position.set(18, card.h - 44);
 
@@ -609,7 +543,6 @@ export default class HeroesScene extends BaseScene {
     this.buildPartyBar();
 
     this.layoutGrid();
-    this.clampScroll(true);
   }
 
   private getHeroXpNeed(level: number): number {
@@ -624,7 +557,7 @@ export default class HeroesScene extends BaseScene {
     return Math.max(1, base + (lv - 1) * growth);
   }
 
-  public onExit(): void {
+  public override onExit(): void {
     // Unbind state subscriptions to avoid leaks / callbacks after scene removed.
     this._unsubHeroesChanged?.();
     this._unsubHeroesChanged = null;
@@ -634,10 +567,7 @@ export default class HeroesScene extends BaseScene {
     // Ensure any hero detail modal is closed when leaving the scene.
     // This prevents ticker/event callbacks from updating UI that is no longer relevant.
     try { this.game.modal.close(); } catch (_) {}
-
-    // Reset drag flags to avoid stray pointer state affecting next scene.
-    this.pointerDown = false;
-    this.isDragging = false;
-    this.moved = false;
+    this.wheelUnbind?.();
+    this.wheelUnbind = null;
   }
 }

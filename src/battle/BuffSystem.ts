@@ -6,6 +6,8 @@ export interface BuffInstance {
   id: BuffId;
   stacks: number;
   expiresRound?: number;
+  sourceId?: string;
+  data?: Record<string, number>;
 }
 
 /**
@@ -27,17 +29,29 @@ export default class BuffSystem {
     }
   }
 
-  public addBuff(sourceId: string, targetId: string, buffId: BuffId, stacks = 1, currentRound = 0): void {
+  public addBuff(
+    sourceId: string,
+    targetId: string,
+    buffId: BuffId,
+    stacks = 1,
+    currentRound = 0,
+    opts?: { durationRounds?: number; data?: Record<string, number> },
+  ): void {
     const def = this.registry.get(buffId);
     const list = this.map.get(targetId) ?? [];
     const existing = list.find((b) => b.id === buffId);
+    const durationRounds = opts?.durationRounds ?? def?.durationRounds;
     if (existing) {
       const max = def?.maxStacks ?? 99;
       existing.stacks = Math.min(max, existing.stacks + stacks);
-      if (def?.durationRounds != null) existing.expiresRound = currentRound + def.durationRounds;
+      if (durationRounds != null) existing.expiresRound = currentRound + durationRounds;
+      existing.sourceId = sourceId;
+      if (opts?.data) existing.data = opts.data;
     } else {
       const inst: BuffInstance = { id: buffId, stacks: Math.max(1, stacks) };
-      if (def?.durationRounds != null) inst.expiresRound = currentRound + def.durationRounds;
+      if (durationRounds != null) inst.expiresRound = currentRound + durationRounds;
+      inst.sourceId = sourceId;
+      if (opts?.data) inst.data = opts.data;
       list.push(inst);
     }
     this.map.set(targetId, list);

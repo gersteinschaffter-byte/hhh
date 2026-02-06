@@ -2,9 +2,10 @@ import { Container, Graphics } from 'pixi.js';
 import type GameApp from '../core/GameApp';
 import BaseScene from './BaseScene';
 import { ECONOMY } from '../game/config';
-import { HERO_MAP } from '../game/data';
+import { HERO_CLASS_LABEL, HERO_MAP } from '../game/data';
 import { createText, formatNumber, roundedRect, drawPanel } from '../ui/uiFactory';
 import UIButton from '../ui/components/UIButton';
+import VirtualList from '../ui/VirtualList';
 
 export default class BagScene extends BaseScene {
   private readonly game: GameApp;
@@ -12,6 +13,8 @@ export default class BagScene extends BaseScene {
   private readonly panel: Graphics;
   private readonly list: Container;
   private unsubs: Array<() => void> = [];
+  private heroSelectList: VirtualList<Container> | null = null;
+  private heroSelectWheelUnbind: (() => void) | null = null;
 
   // Prevent double-tap opening multiple chests in one moment.
   private chestOpenLock: Record<string, boolean> = {};
@@ -39,6 +42,9 @@ export default class BagScene extends BaseScene {
       try { u(); } catch (_) {}
     });
     this.unsubs = [];
+    this.heroSelectWheelUnbind?.();
+    this.heroSelectWheelUnbind = null;
+    this.heroSelectList = null;
   }
 
   public override onResize(w: number, _h: number): void {
@@ -47,6 +53,10 @@ export default class BagScene extends BaseScene {
     this.panel.position.set((w - 680) / 2, 260);
     this.list.position.set(46, 70);
     this.drawList();
+  }
+
+  public override onUpdate(dt: number): void {
+    this.heroSelectList?.update(dt);
   }
 
 
@@ -160,84 +170,130 @@ export default class BagScene extends BaseScene {
     info.anchor.set(0.5);
     info.position.set(panelW / 2, 120);
 
-    const list = new Container();
-    list.position.set(70, 170);
-    modal.content.addChild(list);
-
     const maxLevel = Math.max(1, Math.floor((ECONOMY as any).heroMaxLevel ?? ECONOMY.levelCap ?? 100));
     const owned = [...this.game.state.getSnapshot().heroes];
     owned.sort((a, b) => (b.level || 1) - (a.level || 1));
+    this.heroSelectWheelUnbind?.();
+    this.heroSelectWheelUnbind = null;
 
-    let y = 0;
-    for (const hero of owned) {
-      const row = new Container();
-      const bg = new Graphics();
-      bg.beginFill(0x000000, 0.25);
-      roundedRect(bg, 0, 0, panelW - 140, 76, 14);
-      bg.endFill();
-      row.addChild(bg);
+    const viewW = panelW - 140;
+    const viewH = panelH - 320;
+    const rowH = 76;
+    const gapY = 10;
+    const list = new VirtualList<Container>({
+      width: viewW,
+      height: viewH,
+      itemWidth: viewW,
+      itemHeight: rowH,
+      gapX: 0,
+      gapY,
+      columns: 1,
+      overscanRows: 2,
+      createItem: () => {
+        const row = new Container();
+        const bg = new Graphics();
+        bg.beginFill(0x000000, 0.25);
+        roundedRect(bg, 0, 0, viewW, rowH, 14);
+        bg.endFill();
+        row.addChild(bg);
 
-      const heroDef = HERO_MAP[hero.heroId];
-      const label = createText(heroDef?.name ?? hero.heroId, 20, 0xffffff, '800');
-      label.anchor.set(0, 0.5);
-      label.position.set(16, 38);
-      row.addChild(label);
+        const label = createText('', 20, 0xffffff, '800');
+        label.anchor.set(0, 0.5);
+        label.position.set(16, rowH / 2);
+        row.addChild(label);
 
-      const meta = createText(`Lv.${hero.level} · ${Math.max(1, hero.stars || 1)}★`, 18, 0xd7e6ff, '700');
-      meta.anchor.set(0, 0.5);
-      meta.position.set(160, 38);
-      row.addChild(meta);
+        const meta = createText('', 18, 0xd7e6ff, '700');
+        meta.anchor.set(0, 0.5);
+        meta.position.set(200, rowH / 2);
+        row.addChild(meta);
 
-      const need = this.getHeroXpNeed(hero.level);
-      const xp = Math.max(0, Math.floor(hero.xp || 0));
-      const xpLine = createText(hero.level >= maxLevel ? '已满级' : `经验 ${xp}/${need}`, 18, 0xffe3a3, '800');
-      xpLine.anchor.set(0, 0.5);
-      xpLine.position.set(320, 38);
-      row.addChild(xpLine);
+        const xpLine = createText('', 18, 0xffe3a3, '800');
+        xpLine.anchor.set(0, 0.5);
+        xpLine.position.set(360, rowH / 2);
+        row.addChild(xpLine);
 
-      const btn = new UIButton(hero.level >= maxLevel ? '满级' : '使用', 120, 56);
-      btn.position.set(panelW - 140 - 16 - 120, 10);
-      btn.setDisabled(hero.level >= maxLevel);
-      btn.on('pointertap', () => {
-        const now = this.game.state.getOwnedHero(hero.heroId);
-        if (!now) {
-          this.game.toast.show('英雄不存在。', 2);
+        const btn = new UIButton('使用', 120, 56);
+        btn.position.set(viewW - 16 - 120, 10);
+        btn.on('pointertap', () => {
+          const index = (row as any).__index as number | undefined;
+          if (index == null) return;
+          const hero = owned[index];
+          if (!hero) return;
+          const now = this.game.state.getOwnedHero(hero.heroId);
+          if (!now) {
+            this.game.toast.show('英雄不存在。', 2);
+            return;
+          }
+          if (now.level >= maxLevel) {
+            this.game.toast.show('已达等级上限。', 2);
+            return;
+          }
+          if (!this.game.state.canConsumeInventory('exp_small', count)) {
+            this.game.toast.show('数量不足。', 2);
+            return;
+          }
+          this.game.state.consumeInventory('exp_small', count);
+          const xpGain = count * Math.max(1, Math.floor((ECONOMY as any).heroXpPerItem ?? 40));
+          const res = this.game.state.addHeroXp(hero.heroId, xpGain);
+          if (!res.ok) {
+            this.game.toast.show(res.reason || '使用失败。', 2);
+            return;
+          }
+          if (res.levelAfter && res.levelBefore && res.levelAfter > res.levelBefore) {
+            this.game.toast.show(`升级成功：Lv.${res.levelBefore}→Lv.${res.levelAfter}`, 2);
+          } else {
+            this.game.toast.show('经验已增加。', 2);
+          }
+          this.openExpHeroSelectModal(count);
+        });
+        row.addChild(btn);
+
+        (row as any).__label = label;
+        (row as any).__meta = meta;
+        (row as any).__xp = xpLine;
+        (row as any).__btn = btn;
+        return row;
+      },
+      updateItem: (row, index) => {
+        const hero = owned[index];
+        if (!hero) {
+          row.visible = false;
           return;
         }
-        if (now.level >= maxLevel) {
-          this.game.toast.show('已达等级上限。', 2);
-          return;
-        }
-        if (!this.game.state.canConsumeInventory('exp_small', count)) {
-          this.game.toast.show('数量不足。', 2);
-          return;
-        }
-        this.game.state.consumeInventory('exp_small', count);
-        const xpGain = count * Math.max(1, Math.floor((ECONOMY as any).heroXpPerItem ?? 40));
-        const res = this.game.state.addHeroXp(hero.heroId, xpGain);
-        if (!res.ok) {
-          this.game.toast.show(res.reason || '使用失败。', 2);
-          return;
-        }
-        if (res.levelAfter && res.levelBefore && res.levelAfter > res.levelBefore) {
-          this.game.toast.show(`升级成功：Lv.${res.levelBefore}→Lv.${res.levelAfter}`, 2);
-        } else {
-          this.game.toast.show('经验已增加。', 2);
-        }
-        this.openExpHeroSelectModal(count);
-      });
-      row.addChild(btn);
-
-      row.position.set(0, y);
-      list.addChild(row);
-      y += 86;
-    }
+        row.visible = true;
+        (row as any).__index = index;
+        const heroDef = HERO_MAP[hero.heroId];
+        const classLabel = heroDef?.class ? HERO_CLASS_LABEL[heroDef.class] ?? heroDef.class : '';
+        (row as any).__label.text = heroDef?.name ?? hero.heroId;
+        (row as any).__meta.text = `Lv.${hero.level} · ${Math.max(1, hero.stars || 1)}★ · ${classLabel}`;
+        const need = this.getHeroXpNeed(hero.level);
+        const xp = Math.max(0, Math.floor(hero.xp || 0));
+        (row as any).__xp.text = hero.level >= maxLevel ? '已满级' : `经验 ${xp}/${need}`;
+        const btn = (row as any).__btn as UIButton;
+        btn.setLabel(hero.level >= maxLevel ? '满级' : '使用');
+        btn.setDisabled(hero.level >= maxLevel);
+      },
+    });
+    list.position.set(70, 170);
+    modal.content.addChild(list);
+    this.heroSelectList = list;
+    list.setItemCount(owned.length);
+    list.refresh(true);
+    this.heroSelectWheelUnbind = list.bindWheel(this.game.pixi.view);
 
     const btnBack = new UIButton('返回', 200, 72);
     btnBack.position.set((panelW - 200) / 2, panelH - 140);
     btnBack.on('pointertap', () => this.openExpItemModal());
 
     modal.content.addChild(title, info, btnBack);
+    const prevOnClose = modal.onClose;
+    modal.onClose = () => {
+      this.heroSelectWheelUnbind?.();
+      this.heroSelectWheelUnbind = null;
+      this.heroSelectList = null;
+      modal.onClose = prevOnClose;
+      prevOnClose?.();
+    };
     modal.open();
   }
 

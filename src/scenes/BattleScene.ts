@@ -5,7 +5,7 @@ import BattleEngine from '../battle/BattleEngine';
 import type { FighterSnapshot, Side } from '../battle/BattleTypes';
 import UIButton from '../ui/components/UIButton';
 import { createText } from '../ui/uiFactory';
-import { HERO_MAP } from '../game/data';
+import { HERO_CLASS_LABEL, HERO_MAP } from '../game/data';
 import { ECONOMY, RARITY } from '../game/config';
 
 /**
@@ -128,7 +128,17 @@ export default class BattleScene extends BaseScene {
     }
 
 
-    const mk = (id: string, name: string, side: 'A' | 'B', hp: number, atk: number, spd: number): FighterSnapshot => ({
+    const mk = (
+      id: string,
+      name: string,
+      side: 'A' | 'B',
+      hp: number,
+      atk: number,
+      spd: number,
+      heroId?: string,
+      heroClass?: string,
+      skills?: string[],
+    ): FighterSnapshot => ({
       id,
       name,
       side,
@@ -136,6 +146,9 @@ export default class BattleScene extends BaseScene {
       maxHp: hp,
       atk,
       spd,
+      heroId,
+      heroClass,
+      skills,
     });
 
     // --- Team A: player's owned heroes ---
@@ -151,18 +164,20 @@ export default class BattleScene extends BaseScene {
       const mult = 1 + bonus * (stars - 1);
       const hp2 = Math.round(baseStats.hp * mult);
       const atk2 = Math.round(baseStats.atk * mult);
-      return mk(`p${idx + 1}:${o.heroId}`, name, 'A', hp2, atk2, baseStats.spd);
+      return mk(`p${idx + 1}:${o.heroId}`, name, 'A', hp2, atk2, baseStats.spd, o.heroId, def?.class, def?.skillIds ?? []);
     });
 
     // --- Team B: simple generated enemies ---
     const avgLv = Math.max(1, Math.round(validHeroes.reduce((s, h) => s + (h.level || 1), 0) / validHeroes.length));
     const enemyLv = Math.min(60, avgLv + 2);
     const enemyCount = 3;
+    const enemyClasses = ['warrior', 'tank', 'assassin', 'mage', 'support'];
     const teamB: FighterSnapshot[] = Array.from({ length: enemyCount }).map((_, i) => {
       // Enemies are slightly weaker in rarity but scale with level.
       const r = enemyLv >= 20 ? RARITY.SR : RARITY.R;
       const { hp, atk, spd } = this.genEnemyStats(enemyLv, r, i);
-      return mk(`e${i + 1}`, `敌人${i + 1}`, 'B', hp, atk, spd);
+      const heroClass = enemyClasses[i % enemyClasses.length];
+      return mk(`e${i + 1}`, `敌人${i + 1}`, 'B', hp, atk, spd, undefined, heroClass, []);
     });
 
     this.engine.start({ teamA, teamB });
@@ -326,6 +341,80 @@ export default class BattleScene extends BaseScene {
       (stats.style as any).lineHeight = 28;
     }
 
+    const report = this.engine.getReport();
+    const teamStats = report.units.filter((u) => u.unitId.startsWith('p'));
+    const reportTop = stats ? 392 : 340;
+
+    const reportTitle = createText('战报', 24, 0xffe3a3, '900');
+    reportTitle.anchor.set(0.5);
+    reportTitle.position.set(panelW / 2, reportTop);
+
+    const reportBox = new Container();
+    reportBox.position.set(60, reportTop + 24);
+
+    const reportWidth = panelW - 120;
+    const colName = 0;
+    const colDamage = Math.round(reportWidth * 0.42);
+    const colTaken = Math.round(reportWidth * 0.62);
+    const colHeal = Math.round(reportWidth * 0.80);
+    const colSkill = Math.round(reportWidth * 0.94);
+
+    const header = new Container();
+    const hName = createText('英雄/职业', 18, 0xd7e6ff, '800');
+    hName.position.set(colName, 0);
+    const hDamage = createText('输出', 18, 0xd7e6ff, '800');
+    hDamage.anchor.set(1, 0);
+    hDamage.position.set(colDamage, 0);
+    const hTaken = createText('承伤', 18, 0xd7e6ff, '800');
+    hTaken.anchor.set(1, 0);
+    hTaken.position.set(colTaken, 0);
+    const hHeal = createText('治疗', 18, 0xd7e6ff, '800');
+    hHeal.anchor.set(1, 0);
+    hHeal.position.set(colHeal, 0);
+    const hSkill = createText('技能', 18, 0xd7e6ff, '800');
+    hSkill.anchor.set(1, 0);
+    hSkill.position.set(colSkill, 0);
+    header.addChild(hName, hDamage, hTaken, hHeal, hSkill);
+    reportBox.addChild(header);
+
+    const maxDamage = Math.max(0, ...teamStats.map((u) => u.damageDealt));
+    const maxTaken = Math.max(0, ...teamStats.map((u) => u.damageTaken));
+    const maxHeal = Math.max(0, ...teamStats.map((u) => u.healingDone));
+
+    const reportRowH = 30;
+    teamStats.forEach((u, idx) => {
+      const heroName = u.heroId ? HERO_MAP[u.heroId]?.name ?? u.heroId : u.unitId;
+      const classLabel = u.heroClass ? HERO_CLASS_LABEL[u.heroClass as keyof typeof HERO_CLASS_LABEL] ?? u.heroClass : '';
+      const badges: string[] = [];
+      if (maxDamage > 0 && u.damageDealt === maxDamage) badges.push('输出MVP');
+      if (maxTaken > 0 && u.damageTaken === maxTaken) badges.push('承伤MVP');
+      if (maxHeal > 0 && u.healingDone === maxHeal) badges.push('治疗MVP');
+      const badgeText = badges.length > 0 ? ` · ${badges.join('/')}` : '';
+
+      const nameLine = createText(`${heroName} · ${classLabel}${badgeText}`, 18, 0xffffff, '800');
+      nameLine.position.set(colName, 6 + reportRowH * (idx + 1));
+
+      const damageLine = createText(String(Math.floor(u.damageDealt)), 18, 0xffffff, '800');
+      damageLine.anchor.set(1, 0);
+      damageLine.position.set(colDamage, 6 + reportRowH * (idx + 1));
+
+      const takenLine = createText(String(Math.floor(u.damageTaken)), 18, 0xffffff, '800');
+      takenLine.anchor.set(1, 0);
+      takenLine.position.set(colTaken, 6 + reportRowH * (idx + 1));
+
+      const healLine = createText(String(Math.floor(u.healingDone)), 18, 0xffffff, '800');
+      healLine.anchor.set(1, 0);
+      healLine.position.set(colHeal, 6 + reportRowH * (idx + 1));
+
+      const skillLine = createText(String(Math.floor(u.skillCasts)), 18, 0xffffff, '800');
+      skillLine.anchor.set(1, 0);
+      skillLine.position.set(colSkill, 6 + reportRowH * (idx + 1));
+
+      reportBox.addChild(nameLine, damageLine, takenLine, healLine, skillLine);
+    });
+    const reportHeight = (teamStats.length + 1) * reportRowH + 10;
+    const reportBottomY = reportBox.y + reportHeight;
+
     // Light animation: number count-up (no external deps).
     const intervals: any[] = [];
     const animateCounter = (t: any, target: number) => {
@@ -361,7 +450,7 @@ export default class BattleScene extends BaseScene {
     const nextHint = isWin ? createText(`下一关：第 ${nextStage} 关${nextBossTag}`, 22, 0xffffff, '900') : null;
     if (nextHint) {
       nextHint.anchor.set(0.5);
-      nextHint.position.set(panelW / 2, stats ? 430 : 360);
+      nextHint.position.set(panelW / 2, Math.min(panelH - 320, reportBottomY + 18));
     }
 
     // Prevent double-trigger (rapid taps) creating multiple battles/modals.
@@ -389,7 +478,7 @@ export default class BattleScene extends BaseScene {
       this.startBattleFromState();
     });
 
-    modal.content.addChild(title, rewardTitle, rewardBox, btnAgain, btnHome);
+    modal.content.addChild(title, rewardTitle, rewardBox, btnAgain, btnHome, reportTitle, reportBox);
     if (stats) modal.content.addChild(stats);
     if (nextHint) modal.content.addChild(nextHint);
 
