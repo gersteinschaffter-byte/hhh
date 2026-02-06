@@ -30,7 +30,7 @@ export default class SummonBanner extends Container {
     this.shine.alpha = 0;
     this.addChild(this.shine);
 
-    this.label = createText('召唤之门（占位 Banner）', 24, 0xeaf2ff, '800');
+    this.label = createText('星门召唤', 26, 0xeaf2ff, '900');
     this.label.anchor.set(0.5);
     this.addChild(this.label);
 
@@ -39,24 +39,47 @@ export default class SummonBanner extends Container {
 
   public resize(w: number, h: number): void {
     this.bg.clear();
-    this.bg.beginFill(0x0b1633, 0.65);
+    this.bg.beginFill(0x081428, 0.95);
     roundedRect(this.bg, 0, 0, w, h, 26);
     this.bg.endFill();
 
-    // soft frames
-    this.bg.lineStyle({ width: 3, color: 0x6aa2ff, alpha: 0.22 });
+    // layered glow panels (fake gradient)
+    this.bg.beginFill(0x152a52, 0.7);
+    roundedRect(this.bg, 10, 10, w - 20, h - 20, 22);
+    this.bg.endFill();
+    this.bg.beginFill(0x0b1633, 0.95);
+    roundedRect(this.bg, 20, 26, w - 40, h - 52, 20);
+    this.bg.endFill();
+
+    // soft frame
+    this.bg.lineStyle({ width: 3, color: 0x6aa2ff, alpha: 0.28 });
     roundedRect(this.bg, 14, 14, w - 28, h - 28, 22);
+    this.bg.lineStyle({ width: 2, color: 0x9ad5ff, alpha: 0.18 });
+    roundedRect(this.bg, 26, 34, w - 52, h - 68, 18);
 
     // Portal circle
     const cx = w * 0.5;
-    const cy = h * 0.56;
+    const cy = h * 0.58;
     this.portal.clear();
-    this.portal.beginFill(0x7b3fff, 0.18);
-    this.portal.drawCircle(cx, cy, Math.min(w, h) * 0.22);
+    this.portal.beginFill(0x6b37ff, 0.18);
+    this.portal.drawCircle(cx, cy, Math.min(w, h) * 0.2);
     this.portal.endFill();
-    this.portal.beginFill(0x44e1ff, 0.08);
-    this.portal.drawCircle(cx, cy, Math.min(w, h) * 0.32);
+    this.portal.beginFill(0x44e1ff, 0.1);
+    this.portal.drawCircle(cx, cy, Math.min(w, h) * 0.28);
     this.portal.endFill();
+    this.portal.lineStyle(4, 0xb6f0ff, 0.35);
+    this.portal.drawCircle(cx, cy, Math.min(w, h) * 0.33);
+    this.portal.lineStyle(2, 0x6c91ff, 0.35);
+    this.portal.drawCircle(cx, cy, Math.min(w, h) * 0.36);
+    this.portal.endFill();
+
+    // highlight streaks
+    this.bg.beginFill(0x4cc3ff, 0.08);
+    roundedRect(this.bg, w * 0.14, h * 0.12, w * 0.72, 46, 20);
+    this.bg.endFill();
+    this.bg.beginFill(0x8f6bff, 0.12);
+    roundedRect(this.bg, w * 0.2, h * 0.76, w * 0.6, 40, 18);
+    this.bg.endFill();
 
     // Shine overlay
     this.shine.clear();
@@ -64,7 +87,7 @@ export default class SummonBanner extends Container {
     roundedRect(this.shine, 0, 0, w, h, 26);
     this.shine.endFill();
 
-    this.label.position.set(w / 2, 56);
+    this.label.position.set(w / 2, 64);
   }
 
   /**

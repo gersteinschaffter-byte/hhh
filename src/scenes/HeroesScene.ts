@@ -118,10 +118,10 @@ export default class HeroesScene extends BaseScene {
       this.partyText.position.set(w / 2, 210);
     }
     if (this.partyBar && !(this.partyBar as any).destroyed) {
-      this.partyBar.position.set(w / 2, 240);
+      this.partyBar.position.set(w / 2, 238);
     }
     if (this.partyHint && !(this.partyHint as any).destroyed) {
-      this.partyHint.position.set(w / 2, 242);
+      this.partyHint.position.set(w / 2, 276);
     }
     this.layoutPanel(w);
     this.buildPartyBar();
@@ -134,7 +134,7 @@ export default class HeroesScene extends BaseScene {
   }
 
   private layoutPanel(w: number): void {
-    this.panel.position.set((w - 700) / 2, 260);
+    this.panel.position.set((w - 700) / 2, 300);
     this.heroList.position.set(16, 16);
     this.heroList.resize(700 - 32, 980 - 32);
   }

@@ -9,11 +9,11 @@ export const HERO_CLASSES = ['tank', 'support', 'assassin', 'warrior', 'mage'] a
 export type HeroClass = (typeof HERO_CLASSES)[number];
 
 export const HERO_CLASS_LABEL: Record<HeroClass, string> = {
-  tank: 'Tank',
-  support: 'Support',
-  assassin: 'Assassin',
-  warrior: 'Warrior',
-  mage: 'Mage',
+  tank: '坦克',
+  support: '辅助',
+  assassin: '刺客',
+  warrior: '战士',
+  mage: '法师',
 };
 
 export interface HeroDef {
