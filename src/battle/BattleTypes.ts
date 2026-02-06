@@ -16,6 +16,8 @@ export interface FighterSnapshot {
   maxHp: number;
   atk: number;
   spd: number;
+  heroId?: string;
+  heroClass?: string;
   /** Skill ids owned by the fighter (Phase 5+). Optional for MVP compatibility. */
   skills?: string[];
   /** Buff ids currently applied (Phase 5+). Optional for MVP compatibility. */
@@ -41,6 +43,23 @@ export type BattleEvent =
   | { type: 'buffRemove'; payload: { targetId: string; buffId: string } }
   | { type: 'dead'; payload: { targetId: string } }
   | { type: 'battleEnd'; payload: { winner: Side | 'Draw' } };
+
+export interface UnitStats {
+  unitId: string;
+  heroId?: string;
+  heroClass?: string;
+  damageDealt: number;
+  damageTaken: number;
+  healingDone: number;
+  shieldsApplied: number;
+  kills: number;
+  skillCasts: number;
+  skillCastsById?: Record<string, number>;
+}
+
+export interface BattleReport {
+  units: UnitStats[];
+}
 
 
 /**

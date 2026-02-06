@@ -64,4 +64,8 @@ export default class BattleEngine implements BattleEventEmitter {
   public getEventLog(): BattleEvent[] {
     return [...this.log];
   }
+
+  public getReport(): ReturnType<BattleLogic['getReport']> {
+    return this.logic.getReport();
+  }
 }

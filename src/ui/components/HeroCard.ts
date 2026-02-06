@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import type { HeroDef } from '../../game/data';
+import { HERO_CLASS_LABEL } from '../../game/data';
 import type { OwnedHero } from '../../game/storage';
 import { createText, elementColor, rarityColor, rarityLabel, roundedRect } from '../uiFactory';
 
@@ -13,7 +14,7 @@ import { createText, elementColor, rarityColor, rarityLabel, roundedRect } from 
 export default class HeroCard extends Container {
   public readonly w = 214;
   public readonly h = 268;
-  public readonly hero: HeroDef;
+  private hero: HeroDef;
   private owned: OwnedHero | undefined;
   private inParty = false;
 
@@ -43,7 +44,7 @@ export default class HeroCard extends Container {
     this.nameTxt.anchor.set(0.5);
     this.addChild(this.nameTxt);
 
-    this.tagTxt = createText(`${hero.element} · ${rarityLabel(hero.rarity)}`, 18, 0xd7e6ff, '700');
+    this.tagTxt = createText(this.getTagText(hero), 18, 0xd7e6ff, '700');
     this.tagTxt.anchor.set(0.5);
     this.addChild(this.tagTxt);
 
@@ -125,6 +126,15 @@ export default class HeroCard extends Container {
     this.refresh();
   }
 
+  public setHero(hero: HeroDef, owned?: OwnedHero): void {
+    this.hero = hero;
+    this.owned = owned;
+    this.nameTxt.text = hero.name;
+    this.tagTxt.text = this.getTagText(hero);
+    this.draw();
+    this.refresh();
+  }
+
   public setInParty(inParty: boolean): void {
     this.inParty = !!inParty;
     this.refresh();
@@ -141,5 +151,10 @@ export default class HeroCard extends Container {
 
     // Only show badge when hero is currently in party.
     this.partyBadge.visible = this.inParty;
+  }
+
+  private getTagText(hero: HeroDef): string {
+    const cls = HERO_CLASS_LABEL[hero.class] ?? hero.class;
+    return `${hero.element} · ${rarityLabel(hero.rarity)} · ${cls}`;
   }
 }
