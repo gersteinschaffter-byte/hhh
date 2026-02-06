@@ -129,6 +129,8 @@ export default class BattleLogic {
     this.buffSystem.onRoundStart(this.round);
     this.tickDots();
     this.reduceCooldowns();
+    this.checkBattleEnd();
+    if (this.over) return;
 
     const actors = this.getAllAlive().sort((a, b) => b.spd - a.spd || a.id.localeCompare(b.id));
     for (const actor of actors) {
