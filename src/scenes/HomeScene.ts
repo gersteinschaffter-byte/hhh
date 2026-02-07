@@ -2,9 +2,10 @@ import { Container, Graphics } from "pixi.js";
 import { Button } from "../ui/Button";
 import { TextLabel } from "../ui/TextLabel";
 import type { GameState } from "../core/GameState";
+import type { Scene } from "../core/Scene";
 import type { SceneManager } from "../core/SceneManager";
 
-export class HomeScene {
+export class HomeScene implements Scene {
   readonly container: Container;
   private background: Graphics;
   private title: TextLabel;
