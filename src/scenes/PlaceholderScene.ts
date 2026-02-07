@@ -1,9 +1,10 @@
 import { Container, Graphics } from "pixi.js";
 import { Button } from "../ui/Button";
 import { TextLabel } from "../ui/TextLabel";
+import type { Scene } from "../core/Scene";
 import type { SceneManager, SceneName } from "../core/SceneManager";
 
-export class PlaceholderScene {
+export class PlaceholderScene implements Scene {
   readonly container: Container;
   private background: Graphics;
   private title: TextLabel;

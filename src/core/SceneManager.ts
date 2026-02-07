@@ -2,15 +2,10 @@ import { Container } from "pixi.js";
 import { PlaceholderScene } from "../scenes/PlaceholderScene";
 import { HomeScene } from "../scenes/HomeScene";
 import type { GameState } from "./GameState";
+import type { Scene } from "./Scene";
 import type { UIManager } from "./UIManager";
 
 export type SceneName = "Home" | "Summon" | "Heroes" | "Battle" | "Bag";
-
-export interface Scene {
-  container: Container;
-  destroyScene(): void;
-  resize(width: number, height: number): void;
-}
 
 export class SceneManager {
   private currentScene: Scene | null = null;
